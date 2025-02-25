@@ -12,7 +12,7 @@ router = APIRouter(
 engine = get_engine()
 
 
-# 📌 Função auxiliar para buscar um grupo ou retornar erro 404
+#Função auxiliar para buscar um grupo ou retornar erro 404
 async def get_grupo_or_404(grupo_id: str) -> Grupo:
     grupo = await engine.find_one(Grupo, Grupo.id == ObjectId(grupo_id))
     if not grupo:

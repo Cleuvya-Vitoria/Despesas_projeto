@@ -6,6 +6,9 @@ from odmantic import ObjectId
 from starlette import status
 from typing import List
 
+from bson import ObjectId
+from pymongo import ASCENDING
+
 
 router = APIRouter(
     prefix="/despesas",
@@ -97,20 +100,50 @@ async def listar_despesas_por_grupo(grupo_id: str):
     if not grupo:
         raise HTTPException(status_code=404, detail="Grupo não encontrado")
 
-    despesas = await engine.find(Despesa, Despesa.grupo_id == grupo.id)
+    #despesas = await engine.find(Despesa, Despesa.grupo_id == grupo.id)
+    despesas = await engine.find(Despesa, Despesa.grupo_id == str(grupo.id))
     return despesas
+
+# pra ver o valor e quantas despesas o grupo tem
+@router.get("/grupo/{grupo_id}/despesas", response_model=dict)
+async def listar_total_despesas_por_grupo(grupo_id: str):
+    if not ObjectId.is_valid(grupo_id):
+        raise HTTPException(status_code=400, detail="ID do grupo inválido")
+
+    grupo = await engine.find_one(Grupo, Grupo.id == ObjectId(grupo_id))
+    if not grupo:
+        raise HTTPException(status_code=404, detail="Grupo não encontrado")
+
+    pipeline = [
+        {"$match": {"grupo_id": str(grupo.id)}},  # Filtra pelo grupo
+        {
+            "$group": {
+                "_id": None,  # Agrupa todas as despesas do grupo
+                "total": {"$sum": "$valor"},  # Soma os valores das despesas
+                "quantidade": {"$sum": 1}  # Conta o número de despesas no grupo
+            }
+        }
+    ]
+
+    despesas_agrupadas = await engine.database["despesa"].aggregate(pipeline).to_list(length=1)
+
+    if not despesas_agrupadas:
+        return {
+            "grupo": grupo.nome,  # Nome do grupo
+            "total": 0,  # Se não houver despesas, total é 0
+            "quantidade": 0  # Quantidade também é 0
+        }
+
+    resultado = despesas_agrupadas[0]
+    return {
+        "grupo": grupo.nome,  # Nome do grupo
+        "total": resultado["total"],
+        "quantidade": resultado["quantidade"]
+    }
+
 
 
 # Listar todas as despesas de um usuário
-# @router.get("/usuario/{usuario_id}", response_model=list[Despesa])
-# async def listar_despesas_por_usuario(usuario_id: str):
-#     usuario = await engine.find_one(Usuario, Usuario.id == ObjectId(usuario_id))
-
-#     if not usuario:
-#         raise HTTPException(status_code=404, detail="Usuário não encontrado")
-
-#     despesas = await engine.find(Despesa, Despesa.usuarios_ids==usuario.id)
-#     return despesas
 @router.get("/usuario/{usuario_id}", response_model=list[Despesa])
 async def listar_despesas_por_usuario(usuario_id: str):
     # Encontra o usuário usando o ID como string
